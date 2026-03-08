@@ -10,7 +10,7 @@ class Item(BaseModel):
 
 @app.get("/")
 def read_root():
-    return {"message": "Hello Docker"}
+    return {"message": "Hello Master Surya"}
 
 @app.post("/items/")
 def create_item(item: Item):
