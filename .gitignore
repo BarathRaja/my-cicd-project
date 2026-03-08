@@ -1,0 +1,19 @@
+# Environments
+.env
+.venv
+env/
+venv/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Test and coverage reports
+.pytest_cache/
+coverage.txt
+test-results.xml
+
+# IDEs
+.vscode/
+.idea/

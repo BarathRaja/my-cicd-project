@@ -1,0 +1,92 @@
+name: Python CI/CD Pipeline
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      contents: read
+    
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Scan for Secrets
+        id: secret-scan
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install Requirements
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install black flake8
+
+      - name: Check Formatting and Linting
+        id: lint
+        if: success() || failure()
+        run: |
+          black --check .
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+
+      - name: Run Tests and Generate Coverage
+        id: test
+        if: success() || failure()
+        env:
+          TEST_DB_PASSWORD: ${{ secrets.TEST_DB_PASSWORD }}
+        run: |
+          pytest test_main.py --cov=main --cov-report=term --junitxml=test-results.xml > coverage.txt
+
+      - name: Test Docker Build
+        id: docker-build
+        if: success() || failure()
+        run: docker build -t my-fastapi-app:latest .
+
+      - name: Post PR Report
+        if: always() && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "### 🤖 CI/CD Pipeline Report" > pr_comment.md
+          echo "" >> pr_comment.md
+
+          if [[ "${{ steps.secret-scan.outcome }}" == "failure" ]]; then echo "* 🛑 **SECURITY ALERT:** Secrets detected." >> pr_comment.md; fi
+          if [[ "${{ steps.lint.outcome }}" == "failure" ]]; then echo "* ❌ **Formatting/Linting failed.**" >> pr_comment.md; fi
+          if [[ "${{ steps.test.outcome }}" == "failure" ]]; then echo "* ❌ **Tests failed.**" >> pr_comment.md; fi
+          if [[ "${{ steps.docker-build.outcome }}" == "failure" ]]; then echo "* ❌ **Docker Build failed.**" >> pr_comment.md; fi
+
+          if [[ "${{ steps.secret-scan.outcome }}" == "success" ]] && [[ "${{ steps.lint.outcome }}" == "success" ]] && [[ "${{ steps.test.outcome }}" == "success" ]] && [[ "${{ steps.docker-build.outcome }}" == "success" ]]; then
+            echo "✅ **All checks passed successfully!** Code is ready to merge." >> pr_comment.md
+          fi
+
+          if [ -f coverage.txt ]; then
+            echo -e "\n#### 📊 Test Coverage\n\`\`\`text" >> pr_comment.md
+            cat coverage.txt >> pr_comment.md
+            echo "\`\`\`" >> pr_comment.md
+          fi
+          
+          gh pr comment ${{ github.event.pull_request.number }} --body-file pr_comment.md
+
+  deploy:
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    environment: production 
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - name: Trigger Render Deployment
+        run: curl -X POST ${{ secrets.RENDER_DEPLOY_HOOK }}
