@@ -8,8 +8,6 @@ class Item(BaseModel):
     name: str
     price: float
 
-DB_PASSWORD = os.getenv("TEST_DB_PASSWORD")
-
 @app.get("/")
 def read_root():
     return {"message": "Hello Docker"}
@@ -22,6 +20,9 @@ def create_item(item: Item):
 
 @app.get("/secure-data/")
 def get_secure_data():
-    if DB_PASSWORD == "super_secret_123":
+    # Fetch the environment variable dynamically on every request
+    db_password = os.getenv("TEST_DB_PASSWORD")
+    
+    if db_password == "super_secret_123":
         return {"data": "Top secret information"}
     raise HTTPException(status_code=401, detail="Unauthorized")
