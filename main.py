@@ -24,4 +24,4 @@ def create_item(item: Item):
 def get_secure_data():
     if DB_PASSWORD == "super_secret_123":
         return {"data": "Top secret information"}
-    raise HTTPException(status_code=401, detail="Unauthorized")
+    raise HTTPException(status_code=401, detail="Unauthorized password")
